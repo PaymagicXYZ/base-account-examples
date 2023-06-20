@@ -9,6 +9,7 @@ The examples included in this repository cover the following topics:
 - Creating an ERC20 token transfer transaction
 - Creating a native token transfer transaction
 - Generating a base account address from a user ID
+- Creating an OpenSea Seaport Transaction
 
 ## Table of Contents
 
@@ -17,6 +18,8 @@ The examples included in this repository cover the following topics:
   - [Creating an ERC20 token transfer transaction](#creating-an-erc20-token-transfer-transaction)
   - [Creating a native token transfer transaction](#creating-a-native-token-transfer-transaction)
   - [Generating a base account address from a user ID](#generating-a-base-account-address-from-a-user-id)
+  - [Creating a 0x swap transaction](#creating-a-0x-swap-transaction)
+  - [Creating an OpenSea Seaport Transaction](#creating-an-opensea-seaport-transaction)
 - [Contributing](#contributing)
 
 ## Prerequisites
@@ -111,37 +114,44 @@ import {
   FACTORY_ADDRESS,
   PATCH_FACTORY_ABI,
   KERNEL_ACCOUNT_SUFFIX,
-} from "../src/constants/index";
+} from "../src/constants";
 import { id } from "ethers/lib/utils";
+import { EthereumAddress } from "../src/types";
+
+const provider = getDefaultProvider(
+  process.env.PROVIDER || "https://polygon.llamarpc.com"
+);
+
+const factoryContract = new Contract(
+  FACTORY_ADDRESS,
+  PATCH_FACTORY_ABI,
+  provider
+);
+
+/**
+ * Forms a string by concatenating the user ID and the kernel account suffix.
+ *
+ * @param {string} userId - The user's unique identifier.
+ * @returns {string} - The concatenated string.
+ */
+function formUserIdAndSuffix(userId: string): string {
+  return `${userId}:${KERNEL_ACCOUNT_SUFFIX}`;
+}
+async function getAccountAddress(index: number): Promise<string> {
+  return await factoryContract.getAccountAddress(index);
+}
 
 /**
  * Get the base account address for a user.
  *
  * @param {string} baseProvider - The base wallet provider (e.g., "patchwallets").
  * @param {string} userId - The user's unique identifier (e.g., "example@email.com").
- * @returns {Promise<string>} - A promise that resolves to the user's base account address.
+ * @returns {Promise<EthereumAddress>} - A promise that resolves to the user's base account address.
  */
 async function getBaseAccountAddress(
   baseProvider: string,
   userId: string
-): Promise<string> {
-  const provider = getDefaultProvider(
-    process.env.PROVIDER || "https://polygon.llamarpc.com"
-  );
-
-  const factoryContract = new Contract(
-    FACTORY_ADDRESS,
-    PATCH_FACTORY_ABI,
-    provider
-  );
-
-  function formUserIdAndSuffix(userId: string): string {
-    return `${userId}${KERNEL_ACCOUNT_SUFFIX}`;
-  }
-  async function getAccountAddress(index: number): Promise<string> {
-    return await factoryContract.getAccountAddress(index);
-  }
-
+): Promise<EthereumAddress> {
   return getAccountAddress(
     parseInt(id(formUserIdAndSuffix(`${baseProvider}:${userId}`)))
   );
@@ -150,10 +160,14 @@ async function getBaseAccountAddress(
 
 ### Creating a 0x swap transaction
 
+The `createZeroExSwap.ts` file contains a function `getZeroExSwap` that fetches a 0x swap quote and constructs a transaction object for approval and swap. Optionally, it can also include a transfer transaction to send the bought tokens to a recipient.
+
 ```typescript
 import fetch from "node-fetch";
 import { ERC20_ABI } from "../src/constants";
 import { Interface } from "@ethersproject/abi";
+import { EthereumAddress } from "../src/types";
+import { TransactionFormat } from "../src/types";
 
 /**
  * Fetches a 0x swap quote and constructs a transaction object for approval and swap.
@@ -166,11 +180,11 @@ import { Interface } from "@ethersproject/abi";
  * @returns {Promise<TransactionFormat>} A promise that resolves to a transaction object.
  */
 async function getZeroExSwap(
-  buyToken: string,
+  buyToken: EthereumAddress,
   sellAmount: number,
-  sellToken: string,
-  recipient?: string
-) {
+  sellToken: EthereumAddress,
+  recipient?: EthereumAddress
+): Promise<TransactionFormat> {
   const quoteResponse = await fetch(
     `https://polygon.api.0x.org/swap/v1/quote?buyToken=${buyToken}&sellAmount=${sellAmount}&sellToken=${sellToken}`
   );
@@ -181,7 +195,7 @@ async function getZeroExSwap(
     throw new Error(body);
   }
 
-  const quote = await quoteResponse.json();
+  const quote: any = await quoteResponse.json();
 
   const erc20Interface = new Interface(ERC20_ABI);
 
@@ -208,6 +222,128 @@ async function getZeroExSwap(
   }
 
   return swapTx;
+}
+```
+
+### Creating an OpenSea Seaport Transaction
+
+The `createOpenSeaTx.ts` file contains a function `getOpenSeaTx` that gets the OpenSea transaction data for a given ERC-721 token address, token ID, and sender address.
+
+```typescript
+import {
+  EthereumAddress,
+  TransactionFormat,
+  Fulfiller,
+  OpenSeaResponse,
+  OpenSeaOrder,
+  Listing,
+} from "../src/types";
+import { Interface } from "@ethersproject/abi";
+import { SEAPORT_ABI } from "../src/constants";
+import axios, { AxiosError } from "axios";
+import * as dotenv from "dotenv";
+
+dotenv.config();
+
+/**
+ * Posts fulfiller and listing data to OpenSea API and returns the response.
+ * @param {Fulfiller} fulfiller - The fulfiller object containing the address of the sender.
+ * @param {Listing} listing - The listing object containing the hash, chain, and protocol_address.
+ * @returns {Promise<OpenSeaResponse>} - The OpenSea API response.
+ */
+async function postOpenSeaData(
+  fulfiller: Fulfiller,
+  listing: Listing
+): Promise<OpenSeaResponse> {
+  const url = `https://api.opensea.io/v2/listings/fulfillment_data`;
+  const apiKey = process.env.OPENSEA_API_KEY;
+
+  try {
+    const response = await axios.post<OpenSeaResponse>(
+      url,
+      {
+        listing: listing,
+        fulfiller: fulfiller,
+      },
+      {
+        headers: {
+          "X-API-KEY": apiKey,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    console.error("Error fetching data:", axiosError.message);
+    throw axiosError;
+  }
+}
+
+/**
+ * Fetches OpenSea order data for a given token address and token ID.
+ * @param {EthereumAddress} tokenAddress - The token address.
+ * @param {number} tokenId - The token ID.
+ * @returns {Promise<OpenSeaOrder>} - The OpenSea order data.
+ */
+async function fetchOpenSeaData(
+  tokenAddress: EthereumAddress,
+  tokenId: number
+): Promise<OpenSeaOrder> {
+  const url = `https://api.opensea.io/v2/orders/matic/seaport/listings?asset_contract_address=${tokenAddress}&limit=1&token_ids=${tokenId}&order_by=eth_price&order_direction=asc`;
+  const apiKey = process.env.OPENSEA_API_KEY;
+
+  try {
+    const response = await axios.get<{ orders: OpenSeaOrder[] }>(url, {
+      headers: {
+        "X-API-KEY": apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    return response.data.orders[0];
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    console.error("Error fetching data:", axiosError.message);
+    throw axiosError;
+  }
+}
+
+/**
+ * Gets the OpenSea transaction data for a given token address, token ID, and sender address.
+ * @param {EthereumAddress} tokenAddress - The token address.
+ * @param {number} tokenId - The token ID.
+ * @param {EthereumAddress} sender - The sender address.
+ * @returns {Promise<TransactionFormat>} - The transaction data.
+ */
+async function getOpenSeaTx(
+  tokenAddress: EthereumAddress,
+  tokenId: number,
+  sender: EthereumAddress
+): Promise<TransactionFormat> {
+  const data: OpenSeaOrder = await fetchOpenSeaData(tokenAddress, tokenId);
+  const fulfiller: Fulfiller = { address: sender };
+  const listing: Listing = {
+    hash: data.order_hash,
+    chain: "matic",
+    protocol_address: data.protocol_address,
+  };
+
+  const response: OpenSeaResponse = await postOpenSeaData(fulfiller, listing);
+  const { parameters } = response.fulfillment_data.transaction.input_data;
+
+  const seaportInterface = new Interface(SEAPORT_ABI);
+  const encodedFunctionData = seaportInterface.encodeFunctionData(
+    "fulfillBasicOrder_efficient_6GL6yc",
+    [parameters]
+  );
+
+  return {
+    to: [response.fulfillment_data.transaction.to],
+    value: [response.fulfillment_data.transaction.value],
+    data: [encodedFunctionData],
+  };
 }
 ```
 
