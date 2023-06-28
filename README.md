@@ -1,4 +1,4 @@
-# Base Account Examples
+# Patch Wallet Examples
 
 This repository contains examples and guidelines for working with Base Accounts, which are ERC-4337 compliant smart contract account abstraction wallets. These examples demonstrate how to generate deterministic addresses for your base accounts and provide sample code for creating various types of transactions using the Base Account API.
 
