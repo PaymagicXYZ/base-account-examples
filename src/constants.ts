@@ -15,6 +15,10 @@ export const FACTORY_ADDRESS = "0xa7ac5B9d40D67e6cac7A975Bbf9b513Fb5EA8A60";
 
 export const KERNEL_ACCOUNT_SUFFIX = "kernel-account";
 
+export const KERNEL_ABI = [
+  "function upgradeTo(address _newImplementation) external",
+];
+
 export const SEAPORT_ABI = [
   {
     inputs: [

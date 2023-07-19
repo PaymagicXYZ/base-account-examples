@@ -20,6 +20,7 @@ The examples included in this repository cover the following topics:
   - [Generating a base account address from a user ID](#generating-a-base-account-address-from-a-user-id)
   - [Creating a 0x swap transaction](#creating-a-0x-swap-transaction)
   - [Creating an OpenSea Seaport Transaction](#creating-an-opensea-seaport-transaction)
+  - [Upgrading a Patch Wallet](#upgrading-a-patch-wallet)
 - [Contributing](#contributing)
 
 ## Prerequisites
@@ -344,6 +345,36 @@ async function getOpenSeaTx(
     value: [response.fulfillment_data.transaction.value],
     data: [encodedFunctionData],
   };
+}
+```
+
+### Upgrading a Patch Wallet
+
+The `upgradePatchWallet.ts` file contains a function `getUpgradeTx` that generates an upgrade transaction for a Patch wallet. This function takes the Patch wallet proxy address to be upgraded and the address of the new implementation contract as input parameters.
+
+```typescript
+import { KERNEL_ABI } from "../src/constants";
+import { EthereumAddress, TransactionFormat } from "../src/types";
+import { Interface } from "@ethersproject/abi";
+
+/**
+ * Generates an upgrade transaction for a Patch wallet.
+ *
+ * @param patchWalletAddress - The Patch wallet proxy address to be upgraded.
+ * @param newImplementationAddress - The address of the new implementation contract.
+ * @returns {Promise<TransactionFormat>} A promise that resolves to a transaction object.
+ */
+async function getUpgradeTx(
+  patchWalletAddress: EthereumAddress,
+  newImplementationAddress: EthereumAddress
+): Promise<TransactionFormat> {
+  const patchWalletInterface = new Interface(KERNEL_ABI);
+
+  const transferData = patchWalletInterface.encodeFunctionData("upgradeTo", [
+    newImplementationAddress,
+  ]);
+
+  return { to: [patchWalletAddress], value: ["0x00"], data: [transferData] };
 }
 ```
 
