@@ -164,40 +164,45 @@ async function getBaseAccountAddress(
 The `createZeroExSwap.ts` file contains a function `getZeroExSwap` that fetches a 0x swap quote and constructs a transaction object for approval and swap. Optionally, it can also include a transfer transaction to send the bought tokens to a recipient.
 
 ```typescript
-import fetch from "node-fetch";
+import axios from "axios";
 import { ERC20_ABI } from "../src/constants";
 import { Interface } from "@ethersproject/abi";
 import { EthereumAddress } from "../src/types";
 import { TransactionFormat } from "../src/types";
+import * as dotenv from "dotenv";
 
-/**
- * Fetches a 0x swap quote and constructs a transaction object for approval and swap.
- * Optionally, it can also include a transfer transaction to send the bought tokens to a recipient.
- *
- * @param {EthereumAddress} buyToken - The address of the token to buy.
- * @param {number} sellAmount - The amount of the sell token to sell.
- * @param {EthereumAddress} sellToken - The address of the token to sell.
- * @param {EthereumAddress} [recipient] - Optional recipient address to send the bought tokens to.
- * @returns {Promise<TransactionFormat>} A promise that resolves to a transaction object.
- */
-async function getZeroExSwap(
+dotenv.config();
+
+const API_URL = "https://polygon.api.0x.org/swap/v1/quote";
+const API_KEY = process.env.ZEROEX_API_KEY;
+
+async function fetchQuote(
   buyToken: EthereumAddress,
   sellAmount: number,
-  sellToken: EthereumAddress,
-  recipient?: EthereumAddress
-): Promise<TransactionFormat> {
-  const quoteResponse = await fetch(
-    `https://polygon.api.0x.org/swap/v1/quote?buyToken=${buyToken}&sellAmount=${sellAmount}&sellToken=${sellToken}`
-  );
+  sellToken: EthereumAddress
+): Promise<any> {
+  const url = `${API_URL}?buyToken=${buyToken}&sellToken=${sellToken}&sellAmount=${sellAmount}&feeRecipient=0x74427681c620DE258Aa53a382d6a4C865738A06C&buyTokenPercentageFee=0.1`;
+  const headers = {
+    "0x-api-key": API_KEY,
+  };
 
-  // Check for error from 0x API
-  if (quoteResponse.status !== 200) {
-    const body = await quoteResponse.text();
-    throw new Error(body);
+  try {
+    const response = await axios.get(url, { headers });
+    if (response.status !== 200) {
+      throw new Error(response.statusText);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
   }
+}
 
-  const quote: any = await quoteResponse.json();
-
+function createTransaction(
+  quote: any,
+  buyToken: EthereumAddress,
+  recipient?: EthereumAddress
+): TransactionFormat {
   const erc20Interface = new Interface(ERC20_ABI);
 
   const approveData = erc20Interface.encodeFunctionData("approve", [
@@ -205,7 +210,7 @@ async function getZeroExSwap(
     quote.sellAmount,
   ]);
 
-  const swapTx = {
+  const swapTx: TransactionFormat = {
     to: [buyToken, quote.to],
     data: [approveData, quote.data],
     value: ["0x00", "0x00"],
@@ -223,6 +228,26 @@ async function getZeroExSwap(
   }
 
   return swapTx;
+}
+
+// /**
+//  * Fetches a 0x swap quote and constructs a transaction object for approval and swap.
+//  * Optionally, it can also include a transfer transaction to send the bought tokens to a recipient.
+//  *
+//  * @param {EthereumAddress} buyToken - The address of the token to buy.
+//  * @param {number} sellAmount - The amount of the sell token to sell.
+//  * @param {EthereumAddress} sellToken - The address of the token to sell.
+//  * @param {EthereumAddress} [recipient] - Optional recipient address to send the bought tokens to.
+//  * @returns {Promise<TransactionFormat>} A promise that resolves to a transaction object.
+//  */
+async function getZeroExSwap(
+  buyToken: EthereumAddress,
+  sellAmount: number,
+  sellToken: EthereumAddress,
+  recipient?: EthereumAddress
+): Promise<TransactionFormat> {
+  const quote = await fetchQuote(buyToken, sellAmount, sellToken);
+  return createTransaction(quote, buyToken, recipient);
 }
 ```
 
