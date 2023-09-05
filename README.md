@@ -377,7 +377,7 @@ async function getOpenSeaTx(
 
 ### Creating a 1inch Limit Order
 
-The `create1InchLimitOrder.ts` file contains a function `createOneInchLimitOrder` that creates a limit order and posts it to the 1inch limit order book with its accompanying orderHash and signature. This function takes the patch wallet address, RPC URL, chain ID, maker asset address, maker asset amount, taker asset address, and taker asset amount as input parameters. This code assumes that the patch wallet has already executed an approve transaction for the ERC20 token being swapped.
+The `create1InchLimitOrder.ts` file contains a function `createOneInchLimitOrder` that creates a limit order and posts it to the 1inch limit order book with its accompanying orderHash and signature. This function takes the patch wallet address, RPC URL, chain ID, maker asset address, maker asset amount, taker asset address, and taker asset amount as input parameters. This code assumes that the patch wallet has already executed an approve transaction for the ERC20 token being swapped (which will be validated by the 1inch API).
 
 ```typescript
 import { EthereumAddress } from "../src/types";
@@ -395,7 +395,7 @@ import { EIP712Parameter } from "@1inch/limit-order-protocol-utils";
 // ...
 
 async function createOneInchLimitOrder(
-  patchWalletAddress: EthereumAddress,
+  patchWalletUserId: string,
   rpcUrl: string,
   chainId: number,
   makerAssetAddress: EthereumAddress,
@@ -403,6 +403,7 @@ async function createOneInchLimitOrder(
   takerAssetAddress: EthereumAddress,
   takerAssetAmount: number
 ): Promise<void> {
+  const patchWalletAddress = await getPatchWalletAddress(patchWalletUserId);
   const providerConnector = await createProviderConnector(rpcUrl);
   const contractAddress =
     limitOrderProtocolAddresses[
@@ -423,8 +424,9 @@ async function createOneInchLimitOrder(
   );
   const orderHash = calculateOrderHash(limitOrderBuilder, order);
   const payload = await createTypedData(limitOrderBuilder, order);
-  const signature = await fetchSignature(payload);
+  const signature = await fetchSignature(payload, patchWalletUserId);
   await postOrder(chainId, orderHash, order, signature);
+  console.log("Success");
 }
 ```
 

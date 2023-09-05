@@ -9,22 +9,35 @@ import {
 import Web3 from "web3";
 import axios, { AxiosResponse } from "axios";
 import { EIP712Parameter } from "@1inch/limit-order-protocol-utils";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 const AUTH_URL = "https://paymagicapi.com/v1/auth";
 const KERNEL_SIGN_URL = "https://paymagicapi.com/v1/kernel/sign";
+const RESOLVER_URL = "https://paymagicapi.com/v1/resolver";
 const APPLICATION_JSON = "application/json";
+const LIMIT_ORDERS_URL = "https://limit-orders.1inch.io/v3.0";
+let accessToken: string | null = null;
 
 async function fetchToken(
   clientId: string,
   clientSecret: string
 ): Promise<string> {
+  if (accessToken) {
+    return accessToken;
+  }
+
   const params = new URLSearchParams();
   params.append("client_id", clientId);
   params.append("client_secret", clientSecret);
 
   try {
     const response = await axios.post(AUTH_URL, params);
-    return response.data.access_token!;
+    accessToken = response.data.access_token!;
+    if (accessToken === null) {
+      throw new Error("Access token is null");
+    }
+    return accessToken;
   } catch (error) {
     console.error(`Error fetching token: ${error}`);
     throw error;
@@ -82,26 +95,30 @@ async function createTypedData(
   typedData.types.Order.forEach((item: EIP712Parameter) => {
     orderTypes.Order.push(item);
   });
-  return ethers.utils._TypedDataEncoder.getPayload(
-    typedData.domain,
-    orderTypes,
-    typedData.message
-  );
+  return {
+    domain: typedData.domain,
+    types: orderTypes,
+    value: typedData.message,
+  };
 }
 
-async function fetchSignature(payload: any): Promise<BytesLike> {
+async function fetchSignature(
+  payload: any,
+  userId: string
+): Promise<BytesLike> {
   const body = {
-    userId: "test:elonmusk",
+    userId,
     chain: "matic",
     typedData: payload,
   };
-  const accessToken = fetchToken(
+  const token = await fetchToken(
     process.env.CLIENT_ID!,
     process.env.CLIENT_SECRET!
   );
+
   const response = await axios.post(KERNEL_SIGN_URL, body, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": APPLICATION_JSON,
     },
   });
@@ -114,12 +131,14 @@ async function postOrder(
   order: LimitOrder,
   signature: BytesLike
 ): Promise<AxiosResponse> {
-  const url = `https://limit-orders.1inch.io/v3.0/${chainId}`;
+  const url = `${LIMIT_ORDERS_URL}${chainId}`;
+
   const requestBody = {
     orderHash,
-    order,
+    data: order,
     signature,
   };
+
   return await axios.post(url, requestBody, {
     headers: {
       "Content-Type": APPLICATION_JSON,
@@ -127,8 +146,25 @@ async function postOrder(
   });
 }
 
+async function getPatchWalletAddress(userId: string): Promise<EthereumAddress> {
+  const body = {
+    userIds: userId,
+  };
+  const token = await fetchToken(
+    process.env.CLIENT_ID!,
+    process.env.CLIENT_SECRET!
+  );
+  const response = await axios.post(RESOLVER_URL, body, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": APPLICATION_JSON,
+    },
+  });
+  return response.data.users[0].accountAddress;
+}
+
 async function createOneInchLimitOrder(
-  patchWalletAddress: EthereumAddress,
+  patchWalletUserId: string,
   rpcUrl: string,
   chainId: number,
   makerAssetAddress: EthereumAddress,
@@ -136,6 +172,7 @@ async function createOneInchLimitOrder(
   takerAssetAddress: EthereumAddress,
   takerAssetAmount: number
 ): Promise<void> {
+  const patchWalletAddress = await getPatchWalletAddress(patchWalletUserId);
   const providerConnector = await createProviderConnector(rpcUrl);
   const contractAddress =
     limitOrderProtocolAddresses[
@@ -156,6 +193,7 @@ async function createOneInchLimitOrder(
   );
   const orderHash = calculateOrderHash(limitOrderBuilder, order);
   const payload = await createTypedData(limitOrderBuilder, order);
-  const signature = await fetchSignature(payload);
+  const signature = await fetchSignature(payload, patchWalletUserId);
   await postOrder(chainId, orderHash, order, signature);
+  console.log("Success");
 }
