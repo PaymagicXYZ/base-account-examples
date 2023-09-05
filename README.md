@@ -10,6 +10,7 @@ The examples included in this repository cover the following topics:
 - Creating a native token transfer transaction
 - Generating a base account address from a user ID
 - Creating an OpenSea Seaport Transaction
+- Creating a 1inch Limit Order
 
 ## Table of Contents
 
@@ -20,6 +21,7 @@ The examples included in this repository cover the following topics:
   - [Generating a base account address from a user ID](#generating-a-base-account-address-from-a-user-id)
   - [Creating a 0x swap transaction](#creating-a-0x-swap-transaction)
   - [Creating an OpenSea Seaport Transaction](#creating-an-opensea-seaport-transaction)
+  - [Creating a 1inch Limit Order](#creating-a-1inch-limit-order)
   - [Upgrading a Patch Wallet](#upgrading-a-patch-wallet)
 - [Contributing](#contributing)
 
@@ -370,6 +372,59 @@ async function getOpenSeaTx(
     value: [response.fulfillment_data.transaction.value],
     data: [encodedFunctionData],
   };
+}
+```
+
+### Creating a 1inch Limit Order
+
+The `create1InchLimitOrder.ts` file contains a function `createOneInchLimitOrder` that creates a limit order and posts it to the 1inch limit order book with its accompanying orderHash and signature. This function takes the patch wallet address, RPC URL, chain ID, maker asset address, maker asset amount, taker asset address, and taker asset amount as input parameters. This code assumes that the patch wallet has already executed an approve transaction for the ERC20 token being swapped.
+
+```typescript
+import { EthereumAddress } from "../src/types";
+import { BytesLike, ethers, TypedDataField } from "ethers";
+import {
+  LimitOrderBuilder,
+  limitOrderProtocolAddresses,
+  Web3ProviderConnector,
+  LimitOrder,
+} from "@1inch/limit-order-protocol-utils";
+import Web3 from "web3";
+import axios, { AxiosResponse } from "axios";
+import { EIP712Parameter } from "@1inch/limit-order-protocol-utils";
+
+// ...
+
+async function createOneInchLimitOrder(
+  patchWalletAddress: EthereumAddress,
+  rpcUrl: string,
+  chainId: number,
+  makerAssetAddress: EthereumAddress,
+  makerAssetAmount: number,
+  takerAssetAddress: EthereumAddress,
+  takerAssetAmount: number
+): Promise<void> {
+  const providerConnector = await createProviderConnector(rpcUrl);
+  const contractAddress =
+    limitOrderProtocolAddresses[
+      chainId as keyof typeof limitOrderProtocolAddresses
+    ];
+  const limitOrderBuilder = await createLimitOrderBuilder(
+    contractAddress,
+    chainId,
+    providerConnector
+  );
+  const order = await createLimitOrder(
+    limitOrderBuilder,
+    patchWalletAddress,
+    makerAssetAddress,
+    makerAssetAmount,
+    takerAssetAddress,
+    takerAssetAmount
+  );
+  const orderHash = calculateOrderHash(limitOrderBuilder, order);
+  const payload = await createTypedData(limitOrderBuilder, order);
+  const signature = await fetchSignature(payload);
+  await postOrder(chainId, orderHash, order, signature);
 }
 ```
 
