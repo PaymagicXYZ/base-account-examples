@@ -394,6 +394,20 @@ import { EIP712Parameter } from "@1inch/limit-order-protocol-utils";
 
 // ...
 
+/**
+ * Creates a 1inch limit order for a Patch wallet and posts it to the 1inch limit order book.
+ * It first fetches the patch wallet address, creates a Web3ProviderConnector, and gets the chain ID.
+ * Then, it creates a LimitOrderBuilder, builds a LimitOrder, calculates the order hash, and creates the typed data.
+ * Finally, it fetches the signature and posts the order to the LIMIT_ORDERS_URL.
+ *
+ * @param {string} patchWalletUserId - The patch wallet user ID.
+ * @param {string} rpcUrl - The RPC URL.
+ * @param {EthereumAddress} makerAssetAddress - The maker asset address.
+ * @param {number} makerAssetAmount - The maker asset amount.
+ * @param {EthereumAddress} takerAssetAddress - The taker asset address.
+ * @param {number} takerAssetAmount - The taker asset amount.
+ * @returns {Promise<void>} A promise that resolves when the order is created.
+ */
 async function createOneInchLimitOrder(
   patchWalletUserId: string,
   rpcUrl: string,
