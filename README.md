@@ -42,6 +42,46 @@ yarn
 
 ## Usage
 
+### Enable new validator address(es)
+
+```typescript
+import { ethers } from 'ethers'
+
+async function main() {
+  // Change these fields
+  const userId = 'test:username'
+  const chain = 'maticmum'
+  const newAddresses = ['0x000...']
+  const signer = new ethers.Wallet({YOUR PK}, {YOUR PROVIDER})
+
+  const validatorAddress = '0x9392c6a8a0b5d49cc697b8242d477509bae16700'
+  const addressBookAbi = [{ "inputs": [{ "internalType": "address[]", "name": "_addresses", "type": "address[]" }], "stateMutability": "nonpayable", "type": "constructor" }, { "inputs": [], "name": "getOwners", "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }], "stateMutability": "view", "type": "function" }]
+  const validatorAbi = [{"inputs":[{"internalType":"bytes","name":"_data","type":"bytes"}],"name":"enable","outputs":[],"stateMutability":"payable","type":"function"}]
+  const bytecode = '0x608060405234801561001057600080fd5b506040516102f03803806102f083398101604081905261002f916100f5565b8051610042906000906020840190610049565b50506101b9565b82805482825590600052602060002090810192821561009e579160200282015b8281111561009e57825182546001600160a01b0319166001600160a01b03909116178255602090920191600190910190610069565b506100aa9291506100ae565b5090565b5b808211156100aa57600081556001016100af565b634e487b7160e01b600052604160045260246000fd5b80516001600160a01b03811681146100f057600080fd5b919050565b6000602080838503121561010857600080fd5b82516001600160401b038082111561011f57600080fd5b818501915085601f83011261013357600080fd5b815181811115610145576101456100c3565b8060051b604051601f19603f8301168101818110858211171561016a5761016a6100c3565b60405291825284820192508381018501918883111561018857600080fd5b938501935b828510156101ad5761019e856100d9565b8452938501939285019261018d565b98975050505050505050565b610128806101c86000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c8063a0e67e2b14602d575b600080fd5b60336047565b604051603e919060a7565b60405180910390f35b60606000805480602002602001604051908101604052809291908181526020018280548015609d57602002820191906000526020600020905b81546001600160a01b031681526001909101906020018083116080575b5050505050905090565b6020808252825182820181905260009190848201906040850190845b8181101560e65783516001600160a01b03168352928401929184019160010160c3565b5090969550505050505056fea26469706673582212201fd24d7648c85a25e5c276c31e41a7f86fe4ec82975d7d6c86276a3f5b2d4bc564736f6c63430008170033'
+  const addressBookFactory = new ethers.ContractFactory(addressBookAbi, bytecode, signer)
+  const addressBookContract = await addressBookFactory.deploy(newAddresses)
+  await addressBookContract.deployTransaction.wait()
+  const addressBookAddress = addressBookContract.address
+  const validatorInterface = new ethers.utils.Interface(validatorAbi)
+  const calldata = validatorInterface.encodeFunctionData('enable', [addressBookAddress])
+  const patchWalletTransaction = {
+    'userId': userId,
+    'chain': chain,
+    'to': [validatorAddress],
+    'value': ['0'],
+    'data': [calldata]
+  }
+  // Use patchWalletTransaction to submit userOp using your credentials
+  console.log(patchWalletTransaction)
+}
+main()
+        .then(() => process.exit(0))
+        .catch(error => {
+          console.error(error)
+          process.exit(1)
+        })
+```
+
 ### Creating an ERC20 token transfer transaction
 
 The `createERC20Tx.ts` file contains a function `getERC20Tx` that creates an ERC20 token transfer transaction. This function takes the recipient's address, the token contract address, and the amount to be transferred as input parameters.
