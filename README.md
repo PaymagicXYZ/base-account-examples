@@ -47,7 +47,7 @@ yarn
 ```typescript
 import { ethers } from 'ethers'
 
-async function main() {
+async function enableValidatorAddresses() {
   // Change these fields
   const userId = 'test:username'
   const chain = 'maticmum'
@@ -74,12 +74,6 @@ async function main() {
   // Use patchWalletTransaction to submit userOp using your credentials
   console.log(patchWalletTransaction)
 }
-main()
-        .then(() => process.exit(0))
-        .catch(error => {
-          console.error(error)
-          process.exit(1)
-        })
 ```
 
 ### Creating an ERC20 token transfer transaction
